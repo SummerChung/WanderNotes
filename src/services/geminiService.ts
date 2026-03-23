@@ -10,7 +10,7 @@ export function setGeminiApiKey(key: string) {
 }
 
 // Initialize from environment or localStorage if available
-const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
 const savedKey = localStorage.getItem('GEMINI_API_KEY');
 
 if (envKey) {
