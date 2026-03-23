@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { 
   Search, 
   Plus, 
@@ -17,7 +17,10 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Eye,
-  Edit3
+  Edit3,
+  LogOut,
+  LogIn,
+  User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -25,9 +28,91 @@ import type { TravelMemo } from './types';
 import { getCountryTips, setGeminiApiKey } from './services/geminiService';
 import { cn } from './utils/cn';
 import { COMMON_COUNTRIES } from './constants';
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  handleFirestoreError, 
+  OperationType,
+  FirebaseUser
+} from './firebase';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  setDoc, 
+  doc, 
+  deleteDoc, 
+  serverTimestamp,
+  orderBy
+} from 'firebase/firestore';
+
+// Error Boundary Component
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "發生了預期外的錯誤。";
+      try {
+        const parsed = JSON.parse(this.state.error?.message || "");
+        if (parsed.error && parsed.error.includes("insufficient permissions")) {
+          errorMessage = "權限不足，請確認您已登入。";
+        }
+      } catch (e) {
+        // Not a JSON error
+      }
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-[#fdfcf8]">
+          <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center border border-[#e5e5df]">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Info size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-[#5A5A40] mb-2">糟糕！出錯了</h2>
+            <p className="text-[#5A5A40]/70 mb-6">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="olive-btn w-full justify-center"
+            >
+              重新整理頁面
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <WanderNotes />
+    </ErrorBoundary>
+  );
+}
+
+function WanderNotes() {
   const [memos, setMemos] = useState<TravelMemo[]>([]);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [memoContent, setMemoContent] = useState('');
@@ -40,22 +125,40 @@ export default function App() {
   const [tempApiKey, setTempApiKey] = useState('');
   const [hasApiKey, setHasApiKey] = useState(!!localStorage.getItem('GEMINI_API_KEY'));
 
-  // Load from localStorage
+  // Auth Listener
   useEffect(() => {
-    const saved = localStorage.getItem('wander_notes');
-    if (saved) {
-      try {
-        setMemos(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse saved notes', e);
-      }
-    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Save to localStorage
+  // Firestore Real-time Sync
   useEffect(() => {
-    localStorage.setItem('wander_notes', JSON.stringify(memos));
-  }, [memos]);
+    if (!isAuthReady || !user) {
+      setMemos([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'memos'),
+      where('uid', '==', user.uid),
+      orderBy('updatedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedMemos = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id
+      })) as TravelMemo[];
+      setMemos(fetchedMemos);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'memos');
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady, user]);
 
   const groupedMemos = useMemo(() => {
     const filtered = memos.filter(m => 
@@ -78,23 +181,25 @@ export default function App() {
     }));
   }, [memos, searchQuery]);
 
-  const handleSaveMemo = () => {
-    if (!selectedCountry || !memoContent) return;
+  const handleSaveMemo = async () => {
+    if (!selectedCountry || !memoContent || !user) return;
 
-    const newMemo: TravelMemo = {
-      id: activeMemoId || crypto.randomUUID(),
-      country: selectedCountry,
-      content: memoContent,
-      updatedAt: Date.now(),
-    };
+    const memoId = activeMemoId || crypto.randomUUID();
+    const memoPath = `memos/${memoId}`;
+    
+    try {
+      const newMemo = {
+        uid: user.uid,
+        country: selectedCountry,
+        content: memoContent,
+        updatedAt: Date.now(),
+      };
 
-    if (activeMemoId) {
-      setMemos(prev => prev.map(m => m.id === activeMemoId ? newMemo : m));
-    } else {
-      setMemos(prev => [newMemo, ...prev]);
+      await setDoc(doc(db, 'memos', memoId), newMemo);
+      resetForm();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, memoPath);
     }
-
-    resetForm();
   };
 
   const resetForm = () => {
@@ -106,9 +211,32 @@ export default function App() {
     setEditMode('edit');
   };
 
-  const handleDeleteMemo = (id: string, e: React.MouseEvent) => {
+  const handleDeleteMemo = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setMemos(prev => prev.filter(m => m.id !== id));
+    if (!window.confirm('確定要刪除這則筆記嗎？')) return;
+    
+    const memoPath = `memos/${id}`;
+    try {
+      await deleteDoc(doc(db, 'memos', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, memoPath);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error('Login Error:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout Error:', error);
+    }
   };
 
   const handleEditMemo = (memo: TravelMemo) => {
@@ -184,7 +312,35 @@ export default function App() {
   return (
     <div className="min-h-screen max-w-5xl mx-auto px-4 py-12">
       {/* Header */}
-      <header className="mb-12 text-center">
+      <header className="mb-12 flex flex-col items-center">
+        <div className="w-full flex justify-end mb-4">
+          {isAuthReady && (
+            user ? (
+              <div className="flex items-center gap-4 bg-white p-2 pl-4 rounded-full border border-[#e5e5df] shadow-sm">
+                <div className="flex items-center gap-2">
+                  <img src={user.photoURL || ''} alt="" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
+                  <span className="text-sm font-medium text-[#5A5A40] hidden sm:inline">{user.displayName}</span>
+                </div>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 hover:bg-red-50 text-[#5A5A40]/40 hover:text-red-500 rounded-full transition-colors"
+                  title="登出"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                className="olive-btn"
+              >
+                <LogIn size={18} />
+                登入同步
+              </button>
+            )
+          )}
+        </div>
+        
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -225,6 +381,10 @@ export default function App() {
         </div>
         <button 
           onClick={() => {
+            if (!user) {
+              handleLogin();
+              return;
+            }
             setIsAdding(true);
             setEditMode('edit');
           }}
@@ -234,6 +394,25 @@ export default function App() {
           新增備忘錄
         </button>
       </div>
+
+      {!user && isAuthReady && (
+        <div className="bg-[#5A5A40]/5 rounded-3xl p-12 text-center mb-12 border border-dashed border-[#5A5A40]/20">
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm text-[#5A5A40]">
+            <UserIcon size={32} />
+          </div>
+          <h2 className="text-2xl font-bold text-[#5A5A40] mb-4">開啟雲端同步</h2>
+          <p className="text-[#5A5A40]/70 mb-8 max-w-md mx-auto leading-relaxed">
+            登入後，您的旅遊筆記將會自動同步到雲端，讓您在任何裝置上都能隨時存取。
+          </p>
+          <button 
+            onClick={handleLogin}
+            className="olive-btn mx-auto px-8 py-4 text-lg"
+          >
+            <LogIn size={24} />
+            使用 Google 帳號登入
+          </button>
+        </div>
+      )}
 
       {/* Content Grid - Grouped by Country */}
       <div className="space-y-12">
