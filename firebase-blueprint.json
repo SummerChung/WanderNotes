@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User photo URL" }
+      },
+      "required": ["uid", "email"]
+    },
+    "TravelMemo": {
+      "title": "TravelMemo",
+      "description": "A travel note or memo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the memo" },
+        "uid": { "type": "string", "description": "Owner's Firebase Auth UID" },
+        "country": { "type": "string", "description": "Country name" },
+        "content": { "type": "string", "description": "Markdown content of the memo" },
+        "updatedAt": { "type": "number", "description": "Timestamp of last update" }
+      },
+      "required": ["uid", "country", "content", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/memos/{memoId}": {
+      "schema": "TravelMemo",
+      "description": "Travel memos for all users"
+    }
+  }
+}
