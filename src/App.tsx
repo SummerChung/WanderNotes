@@ -184,7 +184,7 @@ function WanderNotes() {
   const handleSaveMemo = async () => {
     if (!selectedCountry || !memoContent || !user) return;
 
-    const memoId = activeMemoId || crypto.randomUUID();
+    const memoId = activeMemoId || (Date.now().toString(36) + Math.random().toString(36).substring(2));
     const memoPath = `memos/${memoId}`;
     
     try {
