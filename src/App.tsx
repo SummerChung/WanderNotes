@@ -57,11 +57,25 @@ export default function App() {
     localStorage.setItem('wander_notes', JSON.stringify(memos));
   }, [memos]);
 
-  const filteredMemos = useMemo(() => {
-    return memos.filter(m => 
+  const groupedMemos = useMemo(() => {
+    const filtered = memos.filter(m => 
       m.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.content.toLowerCase().includes(searchQuery.toLowerCase())
-    ).sort((a, b) => b.updatedAt - a.updatedAt);
+    );
+
+    const groups: Record<string, TravelMemo[]> = {};
+    filtered.forEach(memo => {
+      if (!groups[memo.country]) {
+        groups[memo.country] = [];
+      }
+      groups[memo.country].push(memo);
+    });
+
+    // Sort countries alphabetically and memos within each country by date
+    return Object.keys(groups).sort().map(country => ({
+      country,
+      memos: groups[country].sort((a, b) => b.updatedAt - a.updatedAt)
+    }));
   }, [memos, searchQuery]);
 
   const handleSaveMemo = () => {
@@ -221,48 +235,69 @@ export default function App() {
         </button>
       </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Content Grid - Grouped by Country */}
+      <div className="space-y-12">
         <AnimatePresence mode="popLayout">
-          {filteredMemos.map((memo) => (
-            <motion.div
+          {groupedMemos.map((group) => (
+            <motion.section
               layout
-              key={memo.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              key={group.country}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              onClick={() => handleEditMemo(memo)}
-              className="journal-card cursor-pointer group relative overflow-hidden flex flex-col"
+              className="space-y-6"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2 text-[#5A5A40]">
+              <div className="flex items-center gap-3 border-b border-[#5A5A40]/10 pb-2">
+                <div className="w-8 h-8 rounded-full bg-[#5A5A40]/10 flex items-center justify-center text-[#5A5A40]">
                   <MapPin size={18} />
-                  <h3 className="text-xl font-semibold">{memo.country}</h3>
                 </div>
-                <button 
-                  onClick={(e) => handleDeleteMemo(memo.id, e)}
-                  className="text-[#5A5A40]/20 hover:text-red-500 transition-colors p-1"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-              
-              <div className="text-[#3a3a30]/80 line-clamp-6 text-sm leading-relaxed mb-4 prose prose-sm prose-stone">
-                <div className="markdown-body">
-                  <ReactMarkdown>{memo.content}</ReactMarkdown>
-                </div>
+                <h2 className="text-2xl font-bold text-[#5A5A40]">{group.country}</h2>
+                <span className="text-xs font-medium px-2 py-1 bg-[#5A5A40]/5 text-[#5A5A40]/60 rounded-full">
+                  {group.memos.length} 則筆記
+                </span>
               </div>
 
-              <div className="text-[10px] uppercase tracking-widest text-[#5A5A40]/40 flex items-center justify-between mt-auto pt-4">
-                <span>{new Date(memo.updatedAt).toLocaleDateString()}</span>
-                <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {group.memos.map((memo) => (
+                  <motion.div
+                    layout
+                    key={memo.id}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    onClick={() => handleEditMemo(memo)}
+                    className="journal-card cursor-pointer group relative overflow-hidden flex flex-col"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="text-[10px] uppercase tracking-widest text-[#5A5A40]/40">
+                        {new Date(memo.updatedAt).toLocaleDateString()}
+                      </div>
+                      <button 
+                        onClick={(e) => handleDeleteMemo(memo.id, e)}
+                        className="text-[#5A5A40]/20 hover:text-red-500 transition-colors p-1"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    
+                    <div className="text-[#3a3a30]/80 line-clamp-6 text-sm leading-relaxed mb-4 prose prose-sm prose-stone">
+                      <div className="markdown-body">
+                        <ReactMarkdown>{memo.content}</ReactMarkdown>
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] uppercase tracking-widest text-[#5A5A40]/40 flex items-center justify-end mt-auto pt-4 border-t border-[#5A5A40]/5">
+                      <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </motion.div>
+                ))}
               </div>
-            </motion.div>
+            </motion.section>
           ))}
         </AnimatePresence>
 
-        {filteredMemos.length === 0 && !isAdding && (
-          <div className="col-span-full py-20 text-center">
+        {groupedMemos.length === 0 && !isAdding && (
+          <div className="py-20 text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#5A5A40]/5 text-[#5A5A40]/20 mb-4">
               <BookOpen size={40} />
             </div>
