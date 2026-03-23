@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Noto+Serif+TC:wght@200..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", "Noto Serif TC", serif;
+}
+
+body {
+  @apply bg-[#fdfcf8] text-[#3a3a30] font-serif;
+}
+
+.journal-card {
+  @apply bg-white rounded-3xl shadow-sm border border-[#e5e5df] p-6 transition-all duration-300;
+}
+
+.journal-card:hover {
+  @apply shadow-md border-[#5A5A40]/30;
+}
+
+.olive-btn {
+  @apply bg-[#5A5A40] text-white rounded-full px-6 py-2 hover:bg-[#4a4a35] transition-colors flex items-center gap-2;
+}
+
+.secondary-btn {
+  @apply border border-[#5A5A40] text-[#5A5A40] rounded-full px-6 py-2 hover:bg-[#5A5A40]/5 transition-colors flex items-center gap-2;
+}
+
