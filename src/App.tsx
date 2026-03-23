@@ -22,7 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import type { TravelMemo } from './types';
-import { getCountryTips } from './services/geminiService';
+import { getCountryTips, setGeminiApiKey } from './services/geminiService';
 import { cn } from './utils/cn';
 import { COMMON_COUNTRIES } from './constants';
 
@@ -36,6 +36,9 @@ export default function App() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [activeMemoId, setActiveMemoId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<'edit' | 'preview'>('edit');
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(!!localStorage.getItem('GEMINI_API_KEY'));
 
   // Load from localStorage
   useEffect(() => {
@@ -110,9 +113,26 @@ export default function App() {
       setAiTips(tips ?? '目前無法取得建議。');
     } catch (error) {
       console.error('AI Tips Error:', error);
-      setAiTips('無法取得 AI 建議，請稍後再試。');
+      if (error instanceof Error && error.message === 'API_KEY_MISSING') {
+        setShowApiKeyModal(true);
+        setAiTips(null);
+      } else {
+        setAiTips('無法取得 AI 建議，請稍後再試。');
+      }
     } finally {
       setIsAiLoading(false);
+    }
+  };
+
+  const handleSaveApiKey = () => {
+    if (tempApiKey.trim()) {
+      setGeminiApiKey(tempApiKey.trim());
+      setHasApiKey(true);
+      setShowApiKeyModal(false);
+      // Retry fetching tips if we were in the middle of it
+      if (selectedCountry) {
+        fetchAiTips();
+      }
     }
   };
 
@@ -412,6 +432,62 @@ export default function App() {
                   className="olive-btn flex-1 justify-center disabled:opacity-50"
                 >
                   儲存筆記
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* API Key Modal */}
+      <AnimatePresence>
+        {showApiKeyModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[#3a3a30]/40 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8"
+            >
+              <div className="flex items-center gap-3 text-[#5A5A40] mb-6">
+                <Sparkles size={24} />
+                <h2 className="text-xl font-bold">設定 Gemini API 金鑰</h2>
+              </div>
+              
+              <p className="text-sm text-[#5A5A40]/70 mb-6 leading-relaxed">
+                為了使用 AI 旅遊建議功能，您需要提供自己的 Google Gemini API 金鑰。
+                金鑰將安全地儲存在您的瀏覽器中，不會上傳到任何伺服器。
+                <a 
+                  href="https://aistudio.google.com/app/apikey" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block mt-2 text-[#5A5A40] underline font-bold"
+                >
+                  👉 點此獲取免費金鑰
+                </a>
+              </p>
+
+              <input 
+                type="password"
+                placeholder="在此貼上您的 API Key..."
+                className="w-full px-4 py-3 rounded-xl border border-[#e5e5df] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20 mb-6"
+                value={tempApiKey}
+                onChange={(e) => setTempApiKey(e.target.value)}
+              />
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowApiKeyModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-[#e5e5df] text-[#5A5A40] font-bold hover:bg-[#fdfcf8] transition-colors"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleSaveApiKey}
+                  disabled={!tempApiKey.trim()}
+                  className="flex-1 px-4 py-3 rounded-xl bg-[#5A5A40] text-white font-bold hover:bg-[#4a4a35] transition-colors disabled:opacity-50"
+                >
+                  儲存並繼續
                 </button>
               </div>
             </motion.div>
