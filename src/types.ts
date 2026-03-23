@@ -1,5 +1,6 @@
 export interface TravelMemo {
   id: string;
+  uid: string;
   country: string;
   content: string;
   updatedAt: number;
