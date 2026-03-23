@@ -5,5 +5,5 @@ import tailwindcss from '@tailwindcss/vite';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/WanderNotes/', // 👈 這裡一定要加上你的儲存庫名稱，前後都要有斜線
+  base: '/WanderNotes/', // 👈 關鍵！這行一定要確保正確，前後都要有斜線
 });
