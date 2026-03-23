@@ -1,14 +1,27 @@
 import { GoogleGenAI } from "@google/genai";
 
-declare const process: {
-  env: {
-    GEMINI_API_KEY: string;
-  };
-};
+let ai: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+export function setGeminiApiKey(key: string) {
+  if (key) {
+    ai = new GoogleGenAI({ apiKey: key });
+    localStorage.setItem('GEMINI_API_KEY', key);
+  }
+}
+
+// Initialize from localStorage if available
+const savedKey = localStorage.getItem('GEMINI_API_KEY');
+if (savedKey) {
+  setGeminiApiKey(savedKey);
+} else if (typeof process !== 'undefined' && process.env.GEMINI_API_KEY) {
+  setGeminiApiKey(process.env.GEMINI_API_KEY);
+}
 
 export async function getCountryTips(country: string) {
+  if (!ai) {
+    throw new Error('API_KEY_MISSING');
+  }
+
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `請針對「${country}」提供簡短的旅遊建議，包含：
