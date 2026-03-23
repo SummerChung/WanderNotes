@@ -9,9 +9,13 @@ export function setGeminiApiKey(key: string) {
   }
 }
 
-// Initialize from localStorage if available
+// Initialize from environment or localStorage if available
+const envKey = import.meta.env.VITE_GEMINI_API_KEY;
 const savedKey = localStorage.getItem('GEMINI_API_KEY');
-if (savedKey) {
+
+if (envKey) {
+  setGeminiApiKey(envKey);
+} else if (savedKey) {
   setGeminiApiKey(savedKey);
 } else if (typeof process !== 'undefined' && process.env.GEMINI_API_KEY) {
   setGeminiApiKey(process.env.GEMINI_API_KEY);
